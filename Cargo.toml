@@ -1,0 +1,14 @@
+[package]
+name = "fastboot"
+version = "0.1.0"
+authors = ["rostyslav <rkhudolii@airtame.com>"]
+publish = false
+
+[lib]
+name = "fastboot"
+
+[dependencies]
+libusb = "*"
+
+[dev-dependencies]
+getopts = "*"
