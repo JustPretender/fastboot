@@ -1,0 +1,12 @@
+# libusb.pc
+
+prefix=/root/libusb
+exec_prefix=${prefix}/MinGW64/dll
+includedir=${prefix}/include/libusb-1.0
+libdir=${exec_prefix}/
+
+Name: libusb
+Description: libusb
+Version: 1.0
+Cflags: -I${includedir}
+Libs: -L${libdir} -llibusb-1.0
