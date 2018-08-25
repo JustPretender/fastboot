@@ -1,0 +1,8 @@
+[package]
+name = "usbio"
+version = "0.1.0"
+authors = ["rostyslav <rkhudolii@airtame.com>"]
+publish = false
+
+[dependencies]
+libusb = "*"

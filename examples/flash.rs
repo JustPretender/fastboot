@@ -1,6 +1,8 @@
 extern crate fastboot;
 use fastboot::fastboot::Fastboot;
-use fastboot::usbio;
+
+extern crate usbio as usb;
+use usb::usbio;
 
 extern crate getopts;
 use getopts::Options;
