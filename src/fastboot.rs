@@ -1,6 +1,8 @@
 use std;
 use std::io::{Read, Write};
 
+pub type FbResult<T> = Result<T, String>;
+
 enum Reply {
     OKAY(String),
     DATA(usize),
@@ -30,24 +32,26 @@ impl<'s> From<&'s mut [u8]> for Reply {
 }
 
 const FB_MAX_REPLY_LEN: usize = 64;
-
-fn transfer<T: Read + Write>(
-    device: &mut T,
-    payload: &[u8],
-    block: bool,
-) -> std::io::Result<Reply> {
-    device.write_all(payload)?;
+// According to U-Boot documentation, Fastboot is a synchronous protocol. Therefor
+// we should always wait for a reply to our "request". This function will block until
+// a reply or an error (except timeout) is received from USB I/O implementation.
+// See u-boot/doc/README.android-fastboot-protocol
+fn fb_send<T: Read + Write>(io: &mut T, payload: &[u8]) -> FbResult<Reply> {
+    io.write_all(payload).map_err(|err| err.to_string())?;
     loop {
         let mut buff = [0; FB_MAX_REPLY_LEN];
-        match device.read(&mut buff) {
+        match io.read(&mut buff) {
             Ok(received) => return Ok(Reply::from(&mut buff[..received])),
             Err(err) => {
                 match err.kind() {
-                    std::io::ErrorKind::TimedOut if block => {
+                    std::io::ErrorKind::TimedOut => {
+                        // Trait can't possible now what is a timeout set by a particular Read/Write implementation
+                        // so it will *not* consider TimedOut a fatal error. Instead it will just try again
+                        // until a reply or another error is received.
                         continue;
                     }
                     _ => {
-                        return Err(err);
+                        return Err(err.to_string());
                     }
                 };
             }
@@ -56,17 +60,17 @@ fn transfer<T: Read + Write>(
 }
 
 pub trait Fastboot {
-    fn getvar(&mut self, var: &str) -> Result<String, String>;
-    fn download(&mut self, data: &[u8]) -> Result<(), String>;
-    fn flash(&mut self, partition: &str) -> Result<(), String>;
-    fn erase(&mut self, partition: &str) -> Result<(), String>;
-    fn reboot(&mut self) -> Result<(), String>;
+    fn getvar(&mut self, var: &str) -> FbResult<String>;
+    fn download(&mut self, data: &[u8]) -> FbResult<()>;
+    fn flash(&mut self, partition: &str) -> FbResult<()>;
+    fn erase(&mut self, partition: &str) -> FbResult<()>;
+    fn reboot(&mut self) -> FbResult<()>;
 }
 
 impl<T: Read + Write> Fastboot for T {
-    fn getvar(&mut self, var: &str) -> Result<String, String> {
+    fn getvar(&mut self, var: &str) -> FbResult<String> {
         let cmd = "getvar:".to_owned() + var;
-        let reply = transfer(self, cmd.as_bytes(), true).map_err(|err| err.to_string())?;
+        let reply = fb_send(self, cmd.as_bytes())?;
         match reply {
             Reply::OKAY(variable) => Ok(variable),
             Reply::FAIL(message) => Err(message),
@@ -74,13 +78,13 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
-    fn download(&mut self, data: &[u8]) -> Result<(), String> {
+    fn download(&mut self, data: &[u8]) -> FbResult<()> {
         let cmd = "download:".to_owned() + &format!("{:08x}", data.len());
-        let reply = transfer(self, cmd.as_bytes(), false).map_err(|err| err.to_string())?;
+        let reply = fb_send(self, cmd.as_bytes())?;
 
         match reply {
             Reply::DATA(size) if size == data.len() => {
-                let reply = transfer(self, data, true).map_err(|err| err.to_string())?;
+                let reply = fb_send(self, data)?;
                 match reply {
                     Reply::OKAY(_) => Ok(()),
                     Reply::FAIL(message) => Err(message),
@@ -92,9 +96,9 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
-    fn flash(&mut self, partition: &str) -> Result<(), String> {
+    fn flash(&mut self, partition: &str) -> FbResult<()> {
         let cmd = "flash:".to_owned() + &partition;
-        let reply = transfer(self, cmd.as_bytes(), true).map_err(|err| err.to_string())?;
+        let reply = fb_send(self, cmd.as_bytes())?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
@@ -102,9 +106,9 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
-    fn erase(&mut self, partition: &str) -> Result<(), String> {
+    fn erase(&mut self, partition: &str) -> FbResult<()> {
         let cmd = "erase:".to_owned() + &partition;
-        let reply = transfer(self, cmd.as_bytes(), true).map_err(|err| err.to_string())?;
+        let reply = fb_send(self, cmd.as_bytes())?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
@@ -112,9 +116,9 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
-    fn reboot(&mut self) -> Result<(), String> {
+    fn reboot(&mut self) -> FbResult<()> {
         let cmd = "reboot";
-        let reply = transfer(self, cmd.as_bytes(), true).map_err(|err| err.to_string())?;
+        let reply = fb_send(self, cmd.as_bytes())?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
