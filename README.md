@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.com/JustPretender/fastboot.svg?branch=master)](https://travis-ci.com/JustPretender/fastboot)
 
 # Table of Contents
 
