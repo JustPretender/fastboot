@@ -1,6 +1,10 @@
+//! Traits, helpers, and type definitions for Fastboot host functionality.
+
 use std;
 use std::io::{Read, Write};
 
+///! Result wrapper that yields either a succesful result of a Fastboot operation
+///! or an error [`String`].
 pub type FbResult<T> = Result<T, String>;
 
 enum Reply {
@@ -32,11 +36,11 @@ impl<'s> From<&'s mut [u8]> for Reply {
 }
 
 const FB_MAX_REPLY_LEN: usize = 64;
-// According to U-Boot documentation, Fastboot is a synchronous protocol. Therefor
+// According to U-Boot documentation, Fastboot is a synchronous protocol. Therefore
 // we should always wait for a reply to our "request". This function will block until
 // a reply or an error (except timeout) is received from USB I/O implementation.
 // See u-boot/doc/README.android-fastboot-protocol
-fn fb_send<T: Read + Write>(io: &mut T, payload: &[u8]) -> FbResult<Reply> {
+fn fb_send<T: Fastboot>(io: &mut T, payload: &[u8]) -> FbResult<Reply> {
     io.write_all(payload).map_err(|err| err.to_string())?;
     loop {
         let mut buff = [0; FB_MAX_REPLY_LEN];
@@ -59,15 +63,14 @@ fn fb_send<T: Read + Write>(io: &mut T, payload: &[u8]) -> FbResult<Reply> {
     }
 }
 
-pub trait Fastboot {
-    fn getvar(&mut self, var: &str) -> FbResult<String>;
-    fn download(&mut self, data: &[u8]) -> FbResult<()>;
-    fn flash(&mut self, partition: &str) -> FbResult<()>;
-    fn erase(&mut self, partition: &str) -> FbResult<()>;
-    fn reboot(&mut self) -> FbResult<()>;
-}
-
-impl<T: Read + Write> Fastboot for T {
+/// The `Fastboot` trait provides Fastboot-protocol host-side interface.
+///
+/// There are no required methods. The only requirement is that an object,
+/// implementing this trait implements also [`Read`], [`Write`] and [`Sized`] traits.
+pub trait Fastboot: Read + Write + Sized {
+    /// Gets a Fastboot variable.
+    ///
+    /// NOTE: Fastboot variables aren't U-Boot environment variables.
     fn getvar(&mut self, var: &str) -> FbResult<String> {
         let cmd = "getvar:".to_owned() + var;
         let reply = fb_send(self, cmd.as_bytes())?;
@@ -78,6 +81,7 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
+    /// Downloads provided data into a client.
     fn download(&mut self, data: &[u8]) -> FbResult<()> {
         let cmd = "download:".to_owned() + &format!("{:08x}", data.len());
         let reply = fb_send(self, cmd.as_bytes())?;
@@ -96,6 +100,7 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
+    /// Flashes downloaded data into a specified partition.
     fn flash(&mut self, partition: &str) -> FbResult<()> {
         let cmd = "flash:".to_owned() + &partition;
         let reply = fb_send(self, cmd.as_bytes())?;
@@ -106,6 +111,7 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
+    /// Erases a specified partition.
     fn erase(&mut self, partition: &str) -> FbResult<()> {
         let cmd = "erase:".to_owned() + &partition;
         let reply = fb_send(self, cmd.as_bytes())?;
@@ -116,6 +122,7 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 
+    /// Reboots a client.
     fn reboot(&mut self) -> FbResult<()> {
         let cmd = "reboot";
         let reply = fb_send(self, cmd.as_bytes())?;
@@ -126,6 +133,12 @@ impl<T: Read + Write> Fastboot for T {
         }
     }
 }
+
+// TODO: not sure if it's a right way to do things
+// but I would like to avoid implementing a newtype
+// workaround for every suitable type that wants to
+// use this trait
+impl<T: Read + Write + Sized> Fastboot for T {}
 
 #[cfg(test)]
 mod tests {
