@@ -7,3 +7,10 @@ matrix:
   allow_failures:
     - rust: nightly
   fast_finish: true
+os:
+    - linux
+
+addons:
+    apt:
+        packages:
+            - libusb-1.0-0-dev
