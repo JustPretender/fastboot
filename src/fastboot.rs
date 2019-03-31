@@ -91,10 +91,14 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Downloads provided data into a client.
     fn download(&mut self, data: &[u8]) -> FbResult<()> {
-        let mut cmd = Vec::with_capacity(DOWNLOAD_CMD.len() + 8);
-        let mut len = format!("{:08x}", data.len()).into_bytes();
-        cmd.extend_from_slice(DOWNLOAD_CMD);
-        cmd.append(&mut len);
+        // Wrapped in block to drop len as soon as possible
+        let cmd = {
+            let mut cmd = Vec::with_capacity(DOWNLOAD_CMD.len() + 8);
+            let mut len = format!("{:08x}", data.len()).into_bytes();
+            cmd.extend_from_slice(DOWNLOAD_CMD);
+            cmd.append(&mut len);
+            cmd
+        };
         let reply = fb_send(self, &cmd)?;
 
         match reply {
