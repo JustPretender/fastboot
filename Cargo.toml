@@ -3,6 +3,7 @@ name = "fastboot"
 version = "0.1.0"
 authors = ["rostyslav <rkhudolii@airtame.com>"]
 publish = false
+edition = "2018"
 
 [lib]
 name = "fastboot"
