@@ -22,20 +22,20 @@ enum Reply {
 
 impl<'s> From<&'s mut [u8]> for Reply {
     fn from(reply: &'s mut [u8]) -> Self {
-        let reply = String::from_utf8_lossy(reply);
         // Split a reply at OKAY/FAIL/DATA
         let (first, second) = reply.split_at(4);
+        let second = String::from_utf8_lossy(second);
         match first {
-            "OKAY" => Reply::OKAY(second.to_owned()),
-            "INFO" => Reply::INFO(second.to_owned()),
-            "FAIL" => Reply::FAIL(second.to_owned()),
-            "DATA" => match usize::from_str_radix(second, 16) {
+            b"OKAY" => Reply::OKAY(second.into_owned()),
+            b"INFO" => Reply::INFO(second.into_owned()),
+            b"FAIL" => Reply::FAIL(second.into_owned()),
+            b"DATA" => match usize::from_str_radix(&second, 16) {
                 Ok(size) => Reply::DATA(size),
                 _ => Reply::FAIL("Failed to decode DATA size".to_owned()),
             },
             _ => {
-                eprintln!("Received: {}", reply);
-                Reply::FAIL(reply.to_string())
+                eprintln!("Received: {}", second);
+                Reply::FAIL(second.into_owned())
             }
         }
     }
