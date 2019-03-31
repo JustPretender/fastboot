@@ -7,11 +7,11 @@ use std::io::{Read, Write};
 ///! or an error [`String`].
 pub type FbResult<T> = Result<T, String>;
 
-const GETVAR_CMD: &'static [u8] = b"getvar:";
-const DOWNLOAD_CMD: &'static [u8] = b"download:";
-const FLASH_CMD: &'static [u8] = b"flash:";
-const ERASE_CMD: &'static [u8] = b"erase:";
-const REBOOT_CMD: &'static [u8] = b"reboot";
+const GETVAR_CMD: &[u8] = b"getvar:";
+const DOWNLOAD_CMD: &[u8] = b"download:";
+const FLASH_CMD: &[u8] = b"flash:";
+const ERASE_CMD: &[u8] = b"erase:";
+const REBOOT_CMD: &[u8] = b"reboot";
 
 enum Reply {
     OKAY(String),
