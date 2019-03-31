@@ -7,6 +7,12 @@ use std::io::{Read, Write};
 ///! or an error [`String`].
 pub type FbResult<T> = Result<T, String>;
 
+const GETVAR_CMD: &'static [u8] = b"getvar:";
+const DOWNLOAD_CMD: &'static [u8] = b"download:";
+const FLASH_CMD: &'static [u8] = b"flash:";
+const ERASE_CMD: &'static [u8] = b"erase:";
+const REBOOT_CMD: &'static [u8] = b"reboot";
+
 enum Reply {
     OKAY(String),
     DATA(usize),
@@ -72,8 +78,10 @@ pub trait Fastboot: Read + Write + Sized {
     ///
     /// NOTE: Fastboot variables aren't U-Boot environment variables.
     fn getvar(&mut self, var: &str) -> FbResult<String> {
-        let cmd = "getvar:".to_owned() + var;
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(GETVAR_CMD.len() + var.len());
+        cmd.extend_from_slice(GETVAR_CMD);
+        cmd.extend_from_slice(var.as_bytes());
+        let reply = fb_send(self, &cmd)?;
         match reply {
             Reply::OKAY(variable) => Ok(variable),
             Reply::FAIL(message) => Err(message),
@@ -83,8 +91,11 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Downloads provided data into a client.
     fn download(&mut self, data: &[u8]) -> FbResult<()> {
-        let cmd = "download:".to_owned() + &format!("{:08x}", data.len());
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(DOWNLOAD_CMD.len() + 8);
+        let mut len = format!("{:08x}", data.len()).into_bytes();
+        cmd.extend_from_slice(DOWNLOAD_CMD);
+        cmd.append(&mut len);
+        let reply = fb_send(self, &cmd)?;
 
         match reply {
             Reply::DATA(size) if size == data.len() => {
@@ -102,8 +113,10 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Flashes downloaded data into a specified partition.
     fn flash(&mut self, partition: &str) -> FbResult<()> {
-        let cmd = "flash:".to_owned() + &partition;
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(FLASH_CMD.len() + partition.len());
+        cmd.extend_from_slice(FLASH_CMD);
+        cmd.extend_from_slice(partition.as_bytes());
+        let reply = fb_send(self, &cmd)?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
@@ -113,8 +126,10 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Erases a specified partition.
     fn erase(&mut self, partition: &str) -> FbResult<()> {
-        let cmd = "erase:".to_owned() + &partition;
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(ERASE_CMD.len() + partition.len());
+        cmd.extend_from_slice(ERASE_CMD);
+        cmd.extend_from_slice(partition.as_bytes());
+        let reply = fb_send(self, &cmd)?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
@@ -124,8 +139,7 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Reboots a client.
     fn reboot(&mut self) -> FbResult<()> {
-        let cmd = "reboot";
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let reply = fb_send(self, REBOOT_CMD)?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
