@@ -2,7 +2,7 @@ pub mod fastboot;
 
 #[cfg(test)]
 mod tests {
-    use fastboot::Fastboot;
+    use crate::fastboot::Fastboot;
     use std::cell::RefCell;
     use std::error::Error;
     use std::fmt;

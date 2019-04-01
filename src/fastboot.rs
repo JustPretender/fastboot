@@ -7,6 +7,12 @@ use std::io::{Read, Write};
 ///! or an error [`String`].
 pub type FbResult<T> = Result<T, String>;
 
+const GETVAR_CMD: &[u8] = b"getvar:";
+const DOWNLOAD_CMD: &[u8] = b"download:";
+const FLASH_CMD: &[u8] = b"flash:";
+const ERASE_CMD: &[u8] = b"erase:";
+const REBOOT_CMD: &[u8] = b"reboot";
+
 enum Reply {
     OKAY(String),
     DATA(usize),
@@ -16,20 +22,20 @@ enum Reply {
 
 impl<'s> From<&'s mut [u8]> for Reply {
     fn from(reply: &'s mut [u8]) -> Self {
-        let reply = String::from_utf8_lossy(reply);
         // Split a reply at OKAY/FAIL/DATA
         let (first, second) = reply.split_at(4);
+        let second = String::from_utf8_lossy(second);
         match first {
-            "OKAY" => Reply::OKAY(second.to_owned()),
-            "INFO" => Reply::INFO(second.to_owned()),
-            "FAIL" => Reply::FAIL(second.to_owned()),
-            "DATA" => match usize::from_str_radix(second, 16) {
+            b"OKAY" => Reply::OKAY(second.into_owned()),
+            b"INFO" => Reply::INFO(second.into_owned()),
+            b"FAIL" => Reply::FAIL(second.into_owned()),
+            b"DATA" => match usize::from_str_radix(&second, 16) {
                 Ok(size) => Reply::DATA(size),
                 _ => Reply::FAIL("Failed to decode DATA size".to_owned()),
             },
             _ => {
-                eprintln!("Received: {}", reply);
-                Reply::FAIL(reply.to_string())
+                eprintln!("Received: {}", second);
+                Reply::FAIL(second.into_owned())
             }
         }
     }
@@ -72,8 +78,10 @@ pub trait Fastboot: Read + Write + Sized {
     ///
     /// NOTE: Fastboot variables aren't U-Boot environment variables.
     fn getvar(&mut self, var: &str) -> FbResult<String> {
-        let cmd = "getvar:".to_owned() + var;
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(GETVAR_CMD.len() + var.len());
+        cmd.extend_from_slice(GETVAR_CMD);
+        cmd.extend_from_slice(var.as_bytes());
+        let reply = fb_send(self, &cmd)?;
         match reply {
             Reply::OKAY(variable) => Ok(variable),
             Reply::FAIL(message) => Err(message),
@@ -83,8 +91,15 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Downloads provided data into a client.
     fn download(&mut self, data: &[u8]) -> FbResult<()> {
-        let cmd = "download:".to_owned() + &format!("{:08x}", data.len());
-        let reply = fb_send(self, cmd.as_bytes())?;
+        // Wrapped in block to drop len as soon as possible
+        let cmd = {
+            let mut cmd = Vec::with_capacity(DOWNLOAD_CMD.len() + 8);
+            let mut len = format!("{:08x}", data.len()).into_bytes();
+            cmd.extend_from_slice(DOWNLOAD_CMD);
+            cmd.append(&mut len);
+            cmd
+        };
+        let reply = fb_send(self, &cmd)?;
 
         match reply {
             Reply::DATA(size) if size == data.len() => {
@@ -102,8 +117,10 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Flashes downloaded data into a specified partition.
     fn flash(&mut self, partition: &str) -> FbResult<()> {
-        let cmd = "flash:".to_owned() + &partition;
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(FLASH_CMD.len() + partition.len());
+        cmd.extend_from_slice(FLASH_CMD);
+        cmd.extend_from_slice(partition.as_bytes());
+        let reply = fb_send(self, &cmd)?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
@@ -113,8 +130,10 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Erases a specified partition.
     fn erase(&mut self, partition: &str) -> FbResult<()> {
-        let cmd = "erase:".to_owned() + &partition;
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let mut cmd = Vec::with_capacity(ERASE_CMD.len() + partition.len());
+        cmd.extend_from_slice(ERASE_CMD);
+        cmd.extend_from_slice(partition.as_bytes());
+        let reply = fb_send(self, &cmd)?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
@@ -124,8 +143,7 @@ pub trait Fastboot: Read + Write + Sized {
 
     /// Reboots a client.
     fn reboot(&mut self) -> FbResult<()> {
-        let cmd = "reboot";
-        let reply = fb_send(self, cmd.as_bytes())?;
+        let reply = fb_send(self, REBOOT_CMD)?;
         match reply {
             Reply::OKAY(_) => Ok(()),
             Reply::FAIL(message) => Err(message),
