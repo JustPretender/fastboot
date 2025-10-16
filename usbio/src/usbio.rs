@@ -87,12 +87,12 @@ pub struct UsbDevice<'a> {
     handle: DeviceHandle<'a>,
     e_in: Endpoint,
     e_out: Endpoint,
-    tx_done_cb: Option<Box<FnMut(u64) + 'a>>,
+    tx_done_cb: Option<Box<dyn FnMut(u64) + 'a>>,
     timeout: std::time::Duration,
 }
 
 impl<'a> UsbDevice<'a> {
-    pub fn set_tx_done_cb(&mut self, cb: Option<Box<FnMut(u64)>>) {
+    pub fn set_tx_done_cb(&mut self, cb: Option<Box<dyn FnMut(u64)>>) {
         self.tx_done_cb = cb;
     }
 }
